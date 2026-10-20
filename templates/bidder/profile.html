@@ -1,0 +1,231 @@
+{% extends "base.html" %}
+{% block title %}Bidder Profile & Team Customization{% endblock %}
+
+{% block extra_style %}
+.color-picker-box {
+  width: 60px;
+  height: 44px;
+  padding: 2px;
+  border: 2px solid #4a1a7a;
+  border-radius: 8px;
+  background: #12002a;
+  cursor: pointer;
+}
+.live-preview-card {
+  border-radius: 16px;
+  padding: 2rem;
+  transition: all 0.3s ease;
+  border: 2px solid;
+  min-height: 200px;
+  box-shadow: 0 0 20px rgba(157, 0, 255, 0.3);
+}
+.logo-preview-frame {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid #fff;
+  background: #0d001a;
+}
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-10">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <div>
+        <h2 class="text-white"><i class="bi bi-gear-fill text-warning me-2"></i>Franchise & Profile Settings</h2>
+        <p class="text-muted mb-0">Customize your team branding, credentials, and auction theme</p>
+      </div>
+      <a href="{{ url_for('bidder_dashboard') }}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left"></i> Dashboard
+      </a>
+    </div>
+
+    <form method="POST" action="{{ url_for('bidder_profile') }}" enctype="multipart/form-data">
+      <div class="row g-4">
+        <!-- Left: Form inputs -->
+        <div class="col-md-7">
+          <!-- Team Branding Card -->
+          <div class="card mb-4 border-purple">
+            <div class="card-header bg-dark d-flex align-items-center">
+              <i class="bi bi-shield-shaded text-info me-2"></i> Team Branding
+            </div>
+            <div class="card-body">
+              <div class="mb-3">
+                <label class="form-label text-muted small text-uppercase">Team / Franchise Name</label>
+                <input type="text" name="team_name" id="inputTeamName" class="form-control"
+                       value="{{ user.team_name or '' }}" placeholder="e.g. Royal Strikers" maxlength="40">
+              </div>
+
+              <div class="mb-3">
+                <label class="form-label text-muted small text-uppercase">Team Logo</label>
+                <div class="d-flex align-items-center gap-3">
+                  {% if user.team_logo %}
+                    <img src="/static/uploads/{{ user.team_logo }}" id="currentLogoImg" class="logo-preview-frame" alt="Logo">
+                  {% else %}
+                    <div id="currentLogoPlaceholder" class="logo-preview-frame d-flex align-items-center justify-content-center text-info fs-2">
+                      <i class="bi bi-shield"></i>
+                    </div>
+                  {% endif %}
+                  <div class="flex-grow-1">
+                    <input type="file" name="team_logo" id="inputTeamLogo" class="form-control" accept="image/png,image/jpeg,image/webp">
+                    <small class="text-muted">PNG, JPG, or WEBP (Max 2MB)</small>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Color Themes -->
+              <div class="row g-3">
+                <div class="col-sm-6">
+                  <label class="form-label text-muted small text-uppercase">Primary Theme Color</label>
+                  <div class="d-flex align-items-center gap-2">
+                    <input type="color" name="color_primary" id="inputPrimaryColor" class="color-picker-box"
+                           value="{{ user.color_primary or '#9d00ff' }}">
+                    <span class="text-monospace small" id="primaryColorCode">{{ user.color_primary or '#9d00ff' }}</span>
+                  </div>
+                </div>
+                <div class="col-sm-6">
+                  <label class="form-label text-muted small text-uppercase">Secondary Theme Color</label>
+                  <div class="d-flex align-items-center gap-2">
+                    <input type="color" name="color_secondary" id="inputSecondaryColor" class="color-picker-box"
+                           value="{{ user.color_secondary or '#1a0033' }}">
+                    <span class="text-monospace small" id="secondaryColorCode">{{ user.color_secondary or '#1a0033' }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Account Credentials Card -->
+          <div class="card mb-4 border-purple">
+            <div class="card-header bg-dark d-flex align-items-center">
+              <i class="bi bi-key-fill text-warning me-2"></i> Account Credentials
+            </div>
+            <div class="card-body">
+              <div class="mb-3">
+                <label class="form-label text-muted small text-uppercase">Username</label>
+                <input type="text" name="username" id="inputUsername" class="form-control"
+                       value="{{ user.username }}" required minlength="3">
+              </div>
+
+              <div class="row g-3">
+                <div class="col-sm-6">
+                  <label class="form-label text-muted small text-uppercase">New Password (Optional)</label>
+                  <input type="password" name="new_password" id="inputPassword" class="form-control" placeholder="Leave blank to keep current">
+                </div>
+                <div class="col-sm-6">
+                  <label class="form-label text-muted small text-uppercase">Confirm New Password</label>
+                  <input type="password" id="inputConfirmPassword" class="form-control" placeholder="Repeat password">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <button type="submit" class="btn btn-primary btn-lg w-100 shadow" style="font-weight: 700;">
+            <i class="bi bi-check2-circle me-1"></i> SAVE ALL CHANGES
+          </button>
+        </div>
+
+        <!-- Right: Live Real-time Card Preview -->
+        <div class="col-md-5">
+          <div class="sticky-top" style="top: 20px;">
+            <label class="form-label text-muted small text-uppercase mb-2"><i class="bi bi-eye text-info me-1"></i> Live Team Card Preview</label>
+            <div id="previewCard" class="live-preview-card text-white mb-3"
+                 style="background: linear-gradient(135deg, {{ user.color_primary or '#9d00ff' }} 0%, {{ user.color_secondary or '#1a0033' }} 100%); border-color: {{ user.color_primary or '#9d00ff' }};">
+              <div class="d-flex align-items-center gap-3 mb-3">
+                {% if user.team_logo %}
+                  <img src="/static/uploads/{{ user.team_logo }}" id="previewLogo" class="logo-preview-frame" alt="Logo">
+                {% else %}
+                  <div id="previewLogo" class="logo-preview-frame d-flex align-items-center justify-content-center text-info fs-2">
+                    <i class="bi bi-shield"></i>
+                  </div>
+                {% endif %}
+                <div>
+                  <h3 class="mb-0" id="previewTeamName" style="font-family: 'Rajdhani', sans-serif; font-weight: 700;">
+                    {{ user.team_name if user.team_name else 'Your Team Name' }}
+                  </h3>
+                  <small class="opacity-75" id="previewOwnerName">Owner: @{{ user.username }}</small>
+                </div>
+              </div>
+
+              <div class="p-3 rounded" style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15);">
+                <div class="d-flex justify-content-between small mb-1">
+                  <span>Squad Players</span>
+                  <strong>11 Players</strong>
+                </div>
+                <div class="d-flex justify-content-between small">
+                  <span>Purse Remaining</span>
+                  <strong class="text-info">₹1,000,000</strong>
+                </div>
+              </div>
+            </div>
+
+            <div class="alert alert-dark border text-muted small">
+              <i class="bi bi-info-circle me-1"></i> This preview represents how your franchise identity appears to the auctioneer and fellow bidders during live bidding.
+            </div>
+          </div>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  const inputTeamName = document.getElementById('inputTeamName');
+  const inputUsername = document.getElementById('inputUsername');
+  const inputPrimary = document.getElementById('inputPrimaryColor');
+  const inputSecondary = document.getElementById('inputSecondaryColor');
+  const primaryCode = document.getElementById('primaryColorCode');
+  const secondaryCode = document.getElementById('secondaryColorCode');
+  const previewCard = document.getElementById('previewCard');
+  const previewTeamName = document.getElementById('previewTeamName');
+  const previewOwnerName = document.getElementById('previewOwnerName');
+  const inputLogo = document.getElementById('inputTeamLogo');
+  const previewLogo = document.getElementById('previewLogo');
+
+  function updatePreview() {
+    const tName = inputTeamName.value.trim() || 'Your Team Name';
+    const uName = inputUsername.value.trim() || 'username';
+    const c1 = inputPrimary.value;
+    const c2 = inputSecondary.value;
+
+    previewTeamName.textContent = tName;
+    previewOwnerName.textContent = `Owner: @${uName}`;
+    primaryCode.textContent = c1;
+    secondaryCode.textContent = c2;
+
+    previewCard.style.background = `linear-gradient(135deg, ${c1} 0%, ${c2} 100%)`;
+    previewCard.style.borderColor = c1;
+    previewCard.style.boxShadow = `0 0 25px ${c1}60`;
+  }
+
+  inputTeamName.addEventListener('input', updatePreview);
+  inputUsername.addEventListener('input', updatePreview);
+  inputPrimary.addEventListener('input', updatePreview);
+  inputSecondary.addEventListener('input', updatePreview);
+
+  // Logo file selection preview
+  inputLogo.addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        if (previewLogo.tagName === 'IMG') {
+          previewLogo.src = evt.target.result;
+        } else {
+          // Replace div with img
+          const img = document.createElement('img');
+          img.id = 'previewLogo';
+          img.className = 'logo-preview-frame';
+          img.src = evt.target.result;
+          previewLogo.parentNode.replaceChild(img, previewLogo);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  });
+</script>
+{% endblock %}

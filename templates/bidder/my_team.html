@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+{% block title %}{{ user.team_name if user.team_name else user.username }} — Squad{% endblock %}
+
+{% block extra_style %}
+.team-hero-banner {
+  background: linear-gradient(135deg, {{ user.color_primary or '#9d00ff' }} 0%, {{ user.color_secondary or '#1a0033' }} 100%);
+  border: 2px solid {{ user.color_primary or '#9d00ff' }};
+  border-radius: 16px;
+  padding: 2.5rem;
+  box-shadow: 0 0 25px rgba(157, 0, 255, 0.4);
+}
+.team-logo-frame {
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  border: 4px solid #fff;
+  background: #0d001a;
+  object-fit: cover;
+  box-shadow: 0 0 15px rgba(0,0,0,0.6);
+}
+.player-squad-card {
+  background: #1e0040;
+  border: 1px solid rgba(157, 0, 255, 0.3);
+  border-radius: 12px;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.player-squad-card:hover {
+  transform: translateY(-4px);
+  border-color: #00f5ff;
+  box-shadow: 0 0 15px rgba(0, 245, 255, 0.3);
+}
+.squad-ovr-badge {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #9d00ff 0%, #2a005a 100%);
+  border: 2px solid #00f5ff;
+  color: #fff;
+  font-family: 'Orbitron', monospace;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+}
+{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+  <a href="{{ url_for('bidder_auction', id=auction.id) }}" class="btn btn-outline-secondary btn-sm mb-3">
+    <i class="bi bi-arrow-left"></i> Back to Auction
+  </a>
+
+  <!-- Custom Themed Team Banner -->
+  <div class="team-hero-banner text-white mb-4">
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-4">
+      <div class="d-flex align-items-center gap-3">
+        {% if user.team_logo %}
+          <img src="/static/uploads/{{ user.team_logo }}" class="team-logo-frame" alt="Team Logo">
+        {% else %}
+          <div class="team-logo-frame d-flex align-items-center justify-content-center text-info" style="font-size: 2.5rem;">
+            <i class="bi bi-shield-shaded"></i>
+          </div>
+        {% endif %}
+        <div>
+          <h1 class="mb-1" style="font-family: 'Rajdhani', sans-serif; font-weight: 700;">
+            {{ user.team_name if user.team_name else (user.username ~ "'s Franchise") }}
+          </h1>
+          <p class="mb-0 text-light opacity-75">
+            Owner: <strong>@{{ user.username }}</strong> &nbsp;|&nbsp; Auction: <strong>{{ auction.name }}</strong>
+          </p>
+        </div>
+      </div>
+      <div class="d-flex gap-2">
+        <a href="{{ url_for('bidder_profile') }}" class="btn btn-sm btn-dark border text-light">
+          <i class="bi bi-palette"></i> Customize Theme & Logo
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Squad Metrics Bar -->
+  {% set total_budget = auction.budget_per_team or 100.0 %}
+  {% set spent = total_budget - budget_remaining %}
+  {% set squad_count = players | length %}
+  {% set total_ovr = 0 %}
+  {% for p in players %}{% set total_ovr = total_ovr + (p.ovr or 0) %}{% endfor %}
+  {% set avg_ovr = (total_ovr / squad_count) | round(1) if squad_count > 0 else 0 %}
+
+  <div class="row g-3 mb-4">
+    <div class="col-md-3">
+      <div class="card p-3 text-center border-purple">
+        <small class="text-muted text-uppercase">Squad Size</small>
+        <div class="fs-3 fw-bold text-white">{{ squad_count }} <span class="fs-6 text-muted">/ {{ auction.max_squad_size or 25 }}</span></div>
+        <small class="text-info">Min Required: {{ auction.min_squad_size or 15 }}</small>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card p-3 text-center border-purple">
+        <small class="text-muted text-uppercase">Squad Average OVR</small>
+        <div class="fs-3 fw-bold text-info">{{ avg_ovr if avg_ovr > 0 else '--' }}</div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card p-3 text-center border-purple">
+        <small class="text-muted text-uppercase">Total Spent</small>
+        <div class="fs-3 fw-bold text-warning">₹{{ "%.2f"|format(spent) }} Cr</div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card p-3 text-center border-purple">
+        <small class="text-muted text-uppercase">Purse Remaining</small>
+        <div class="fs-3 fw-bold text-success">₹{{ "%.2f"|format(budget_remaining) }} Cr</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Acquired Squad Players -->
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="text-white mb-0"><i class="bi bi-people text-info me-2"></i>Acquired Players ({{ squad_count }})</h3>
+  </div>
+
+  {% if players %}
+    <div class="row g-3">
+      {% for p in players %}
+      <div class="col-md-6 col-lg-4">
+        <div class="card player-squad-card p-3 h-100">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <div>
+              <h4 class="text-white mb-0" style="font-family: 'Rajdhani', sans-serif;">{{ p.player_name }}</h4>
+              <span class="badge bg-secondary">{{ p.role }}</span>
+              {% if p.bowling_style %}
+                <span class="badge bg-dark border text-info">{{ p.bowling_style }}</span>
+              {% endif %}
+            </div>
+            <div class="squad-ovr-badge">{{ p.ovr }}</div>
+          </div>
+          <hr class="border-purple my-2">
+          <div class="d-flex justify-content-between align-items-center small">
+            <span class="text-muted">Bought for:</span>
+            <strong class="text-warning fs-6">₹{{ "%.2f"|format(p.sold_price) }} Cr</strong>
+          </div>
+          <div class="d-flex justify-content-between align-items-center small text-muted">
+            <span>Base was:</span>
+            <span>₹{{ "%.2f"|format(p.base_price) }} Cr</span>
+          </div>
+
+          {% if p.stats and p.stats.bowling_deliveries %}
+          <div class="mt-2 pt-2" style="border-top: 1px solid rgba(157,0,255,0.3);">
+            <button class="btn btn-sm btn-link text-info text-decoration-none p-0 w-100 text-start d-flex justify-content-between align-items-center"
+                    type="button" data-bs-toggle="collapse" data-bs-target="#delivs-{{ p.id }}">
+              <small class="fw-bold"><i class="bi bi-bullseye me-1"></i> {{ p.bowling_style or 'Bowling' }} Skills</small>
+              <i class="bi bi-chevron-down small"></i>
+            </button>
+            <div class="collapse mt-2" id="delivs-{{ p.id }}">
+              <div class="row g-1">
+                {% for d in p.stats.bowling_deliveries %}
+                <div class="col-6">
+                  <div class="p-1 rounded d-flex justify-content-between align-items-center" style="background: #0d001a; border: 1px solid rgba(157,0,255,0.2); font-size: 0.75rem;">
+                    <span class="text-truncate text-light me-1" title="{{ d.name }}">{{ d.name }}</span>
+                    <span class="badge bg-dark border text-info px-1 py-0">{{ d.rating }}</span>
+                  </div>
+                </div>
+                {% endfor %}
+              </div>
+            </div>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="card text-center p-5 border-purple">
+      <div class="mb-3"><i class="bi bi-person-x text-muted" style="font-size: 3rem;"></i></div>
+      <h4 class="text-white">No Players Bought Yet</h4>
+      <p class="text-muted">Enter the live auction room and place bids when players go up on the hammer!</p>
+      <div>
+        <a href="{{ url_for('bidder_auction', id=auction.id) }}" class="btn btn-primary">
+          <i class="bi bi-broadcast"></i> Go to Live Auction Room
+        </a>
+      </div>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

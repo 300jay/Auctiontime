@@ -1,0 +1,6 @@
+flask
+flask-socketio
+flask-login
+werkzeug
+python-dotenv
+pillow

@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Auctioneer Dashboard{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h2><i class="bi bi-speedometer2"></i> Auctioneer Dashboard</h2>
+  <a href="{{ url_for('create_auction') }}" class="btn btn-primary">
+    <i class="bi bi-plus-lg"></i> New Auction
+  </a>
+</div>
+
+{% if auctions %}
+<div class="row g-3">
+  {% for a in auctions %}
+  <div class="col-md-6 col-lg-4">
+    <div class="card h-100">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <strong>{{ a.name }}</strong>
+        <span class="badge
+          {% if a.status == 'active' %}bg-success
+          {% elif a.status == 'paused' %}bg-warning text-dark
+          {% elif a.status == 'ended' %}bg-secondary
+          {% else %}bg-info text-dark{% endif %}">
+          {{ a.status }}
+        </span>
+      </div>
+      <div class="card-body">
+        <p class="mb-1 small"><i class="bi bi-wallet2 text-info me-1"></i> Budget/Team: <strong class="text-white">{{ a.budget_per_team | format_cr }}</strong></p>
+        <p class="mb-3 small text-muted">Created: {{ a.created_at }}</p>
+        <div class="d-flex gap-2">
+          <a href="{{ url_for('manage_auction', id=a.id) }}" class="btn btn-sm btn-outline-primary flex-fill">
+            <i class="bi bi-gear"></i> Manage
+          </a>
+          <a href="{{ url_for('host_auction', id=a.id) }}" class="btn btn-sm btn-primary flex-fill">
+            <i class="bi bi-broadcast"></i> Host
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="text-center py-5 text-muted">
+  <i class="bi bi-inbox" style="font-size:3rem;"></i>
+  <p class="mt-2">No auctions yet. <a href="{{ url_for('create_auction') }}">Create one!</a></p>
+</div>
+{% endif %}
+{% endblock %}

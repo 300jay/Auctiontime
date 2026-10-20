@@ -1,0 +1,540 @@
+{% extends "base.html" %}
+{% block title %}Live Auction — {{ auction.name }}{% endblock %}
+
+{% block extra_style %}
+.live-pulse {
+  animation: live-pulse-anim 1.5s infinite;
+}
+@keyframes live-pulse-anim {
+  0% { box-shadow: 0 0 0 0 rgba(0, 245, 255, 0.7); }
+  70% { box-shadow: 0 0 0 10px rgba(0, 245, 255, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(0, 245, 255, 0); }
+}
+.glow-bid {
+  font-family: 'Orbitron', monospace;
+  font-size: 3.5rem;
+  font-weight: 900;
+  color: #00f5ff;
+  text-shadow: 0 0 15px rgba(0, 245, 255, 0.6);
+}
+.ovr-badge-large {
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #9d00ff 0%, #2a005a 100%);
+  border: 3px solid #00f5ff;
+  color: #fff;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 1.8rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 15px rgba(157, 0, 255, 0.6);
+}
+.bidder-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #9d00ff;
+}
+.bid-log-item {
+  border-left: 3px solid #9d00ff;
+  padding: 8px 12px;
+  margin-bottom: 6px;
+  background: rgba(157, 0, 255, 0.12);
+  border-radius: 0 6px 6px 0;
+  animation: fadeIn 0.3s ease;
+  color: #ffffff;
+}
+.quick-bid-btn {
+  background: rgba(0, 245, 255, 0.12) !important;
+  border: 1.5px solid #00f5ff !important;
+  color: #00f5ff !important;
+  font-weight: 700 !important;
+  transition: all 0.2s ease;
+}
+.quick-bid-btn:hover {
+  background: #00f5ff !important;
+  color: #000000 !important;
+  box-shadow: 0 0 15px rgba(0,245,255,0.7) !important;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+{% endblock %}
+
+{% block content %}
+<!-- Top Header Strip -->
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 p-3 rounded" style="background: #15002a; border: 1.5px solid #9d00ff; box-shadow: 0 0 15px rgba(157,0,255,0.25);">
+  <div class="d-flex align-items-center gap-3">
+    <h3 class="mb-0 text-white font-rajdhani fw-bold">{{ auction.name }}</h3>
+    <span id="auctionStatusBadge" class="badge fs-6 {% if auction.status == 'active' %}bg-success live-pulse{% elif auction.status == 'paused' %}bg-warning text-dark{% else %}bg-secondary{% endif %}">
+      {% if auction.status == 'active' %}● LIVE{% else %}{{ auction.status | upper }}{% endif %}
+    </span>
+  </div>
+  <div class="d-flex align-items-center gap-4">
+    <div>
+      <small class="d-block" style="color: #c4a8ff; font-weight: 600;">Your Remaining Purse</small>
+      <span class="fs-4 fw-bold text-info" id="userBudgetDisplay">₹{{ "%.2f"|format(budget_remaining) }} Cr</span>
+    </div>
+    <a href="{{ url_for('my_team', auction_id=auction.id) }}" class="btn btn-outline-info fw-bold">
+      <i class="bi bi-people-fill"></i> My Squad
+    </a>
+  </div>
+</div>
+
+<!-- Alert Banner for Sold/Unsold/Errors -->
+<div id="liveAlertBox" style="display:none;" class="alert alert-info alert-dismissible show" role="alert">
+  <span id="liveAlertText"></span>
+  <button type="button" class="btn-close" aria-label="Close" onclick="hideAlert()"></button>
+</div>
+
+<div class="row g-4">
+  <!-- Left Column: Current Active Player & Bid Controls -->
+  <div class="col-lg-8">
+    <div class="card shadow-lg mb-4" style="border: 2px solid #9d00ff; background: #110022;">
+      <div class="card-header d-flex justify-content-between align-items-center" style="background: #1c0038;">
+        <span class="text-uppercase tracking-wider small fw-bold text-info"><i class="bi bi-broadcast text-danger me-1"></i> CURRENT LOT ON THE HAMMER</span>
+        <span id="playerStatusPill" class="badge bg-secondary">WAITING</span>
+      </div>
+      <div class="card-body p-4 text-center">
+        <!-- Player Info Box -->
+        <div id="playerDisplayArea">
+          <div class="d-flex justify-content-center align-items-center gap-4 mb-3">
+            <div class="ovr-badge-large" id="playerOvr">--</div>
+            <div class="text-start">
+              <h1 class="text-white mb-1" id="playerName" style="font-family: 'Rajdhani', sans-serif; font-weight: 700; letter-spacing: 1px;">Waiting for Auctioneer...</h1>
+              <div class="d-flex gap-2">
+                <span class="badge bg-secondary" id="playerRole">Role</span>
+                <span class="badge bg-dark border border-purple text-info" id="playerBowling">Bowling</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Base Price & Current Bid Box -->
+          <div class="p-4 my-3 rounded" style="background: #090014; border: 1.5px solid rgba(157,0,255,0.4);">
+            <div class="small text-uppercase mb-1" style="color: #c4a8ff; font-weight: 600;" id="bidLabel">Current Highest Bid</div>
+            <div class="glow-bid mb-2" id="currentBidDisplay" style="font-size: 2.8rem; font-weight: 800; color: #00f5ff; font-family: 'Rajdhani', sans-serif;">₹0.00 Cr</div>
+            <div style="color: #e2d4fd; font-size: 1.05rem;">
+              Base Price: <strong class="text-white" id="basePriceDisplay">₹0.00 Cr</strong>
+              <span class="mx-2 text-muted">|</span>
+              Held By: <strong class="text-warning" id="highestBidderDisplay">None (Opening)</strong>
+            </div>
+          </div>
+
+          <!-- Primary Attributes / Specialties Breakdown (role-based) -->
+          <div class="my-3 p-3 rounded text-start" id="primaryStatsContainer"
+               style="background: #090014; border: 1.5px solid rgba(157,0,255,0.4); display: none;">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <span class="small text-uppercase fw-bold text-info">
+                <i class="bi bi-bar-chart-fill me-1"></i> KEY ATTRIBUTES & SPECIALTIES
+              </span>
+              <span class="badge bg-dark border text-info" id="statsRoleBadge"></span>
+            </div>
+            <div class="row g-2" id="primaryStatsGrid"></div>
+          </div>
+
+          <!-- Bid Input & Action Controls -->
+          <div class="mt-4" id="bidControlsArea">
+            <div class="row g-2 justify-content-center mb-3">
+              <div class="col-auto"><button type="button" class="btn quick-bid-btn fw-bold" data-increment="0.25">+ 0.25 Cr</button></div>
+              <div class="col-auto"><button type="button" class="btn quick-bid-btn fw-bold" data-increment="0.50">+ 0.50 Cr</button></div>
+              <div class="col-auto"><button type="button" class="btn quick-bid-btn fw-bold" data-increment="1.00">+ 1.00 Cr</button></div>
+              <div class="col-auto"><button type="button" class="btn quick-bid-btn fw-bold" data-increment="2.00">+ 2.00 Cr</button></div>
+            </div>
+
+            <div class="row g-2 justify-content-center">
+              <div class="col-md-6">
+                <div class="input-group">
+                  <span class="input-group-text bg-dark border-purple text-info">₹</span>
+                  <input type="number" id="bidAmountInput" class="form-control form-control-lg text-white" placeholder="Amount in Cr (e.g. 2.5)" step="0.25" min="0">
+                  <span class="input-group-text bg-dark border-purple text-info">Cr</span>
+                </div>
+              </div>
+              <div class="col-md-4">
+                <button id="btnPlaceBid" class="btn btn-primary btn-lg w-100 shadow" style="background: linear-gradient(135deg, #00f5ff 0%, #9d00ff 100%); border:none; font-weight: 800; color:#000;">
+                  <i class="bi bi-hammer me-1"></i> PLACE BID
+                </button>
+              </div>
+            </div>
+            <div class="small mt-2" id="bidHint" style="color: #c4a8ff; min-height: 1.4em;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Live Bid Activity Feed -->
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-activity text-info me-1"></i> Live Bid Activity Log</span>
+        <small style="color: #c4a8ff;">Real-time room events</small>
+      </div>
+      <div class="card-body p-3" id="bidLogContainer" style="max-height: 220px; overflow-y: auto;">
+        <div class="small text-center py-3" id="emptyLogPrompt" style="color: #c4a8ff;">Waiting for live bids in this session...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Column: Lobby Bidders & Player Queue -->
+  <div class="col-lg-4">
+    <!-- Registered Teams / Bidders in Lobby -->
+    <div class="card mb-4">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-people-fill text-warning me-1"></i> Teams in Lobby</span>
+        <span class="badge bg-secondary">{{ bidders | length }}/20</span>
+      </div>
+      <div class="card-body p-2" style="max-height: 280px; overflow-y: auto;">
+        {% for b in bidders %}
+        <div class="bidder-card p-3 rounded mb-2" id="bidder-item-{{ b.user_id }}"
+             style="background: linear-gradient(135deg, {{ b.color_primary or '#9d00ff' }}26 0%, {{ b.color_secondary or '#1a0033' }}99 100%);
+                    border: 2px solid {{ b.color_primary or '#9d00ff' }};
+                    box-shadow: 0 4px 12px {{ b.color_primary or '#9d00ff' }}22;">
+          <div class="d-flex align-items-center gap-3">
+            {% if b.team_logo %}
+              <img src="/static/uploads/{{ b.team_logo }}" class="rounded-circle" alt="Logo"
+                   style="width: 46px; height: 46px; object-fit: contain; background: rgba(0,0,0,0.5); border: 2px solid {{ b.color_primary or '#9d00ff' }};">
+            {% else %}
+              <div class="rounded-circle d-flex align-items-center justify-content-center text-white fw-bold"
+                   style="width: 46px; height: 46px; background: {{ b.color_primary or '#9d00ff' }}; border: 2px solid rgba(255,255,255,0.2); font-size: 1.1rem;">
+                {{ (b.team_name or b.username)[:2]|upper }}
+              </div>
+            {% endif %}
+            <div class="flex-grow-1 min-w-0">
+              <div class="d-flex align-items-center justify-content-between">
+                <strong class="text-white text-truncate" title="{{ b.team_name or b.username }}">
+                  {{ b.team_name if b.team_name else b.username }}
+                </strong>
+                {% if b.user_id == session.user_id %}
+                  <span class="badge bg-primary ms-1" style="font-size: 0.65rem;">YOU</span>
+                {% endif %}
+              </div>
+              <small class="d-block" style="color: #c4a8ff;">@{{ b.username }}</small>
+              <div class="d-flex justify-content-between align-items-center mt-2">
+                <span class="badge bg-dark border" style="border-color: {{ b.color_primary or '#9d00ff' }} !important; color: #00f5ff; font-weight: 700;">
+                  <i class="bi bi-wallet2 me-1"></i><span id="bidder-budget-{{ b.user_id }}">₹{{ "%.2f"|format(b.budget_remaining) }} Cr</span>
+                </span>
+                <span class="badge bg-dark text-light border border-secondary" id="bidder-squad-{{ b.user_id }}">
+                  <i class="bi bi-people me-1"></i>{{ b.squad_count or 0 }}/{{ auction.max_squad_size or 25 }}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Players Queue List -->
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-card-list text-info me-1"></i> Auction Player Queue</span>
+        <span class="badge bg-dark border text-light">{{ players | length }} total</span>
+      </div>
+      <div class="card-body p-0" style="max-height: 420px; overflow-y: auto;">
+        <table class="table table-sm align-middle mb-0">
+          <tbody>
+            {% for p in players %}
+            <tr id="queue-row-{{ p.id }}" class="{% if p.status == 'active' %}table-warning text-dark{% elif p.status == 'sold' %}table-success text-dark{% elif p.status == 'unsold' %}text-muted{% endif %}"
+                style="border-bottom: 1px solid rgba(157,0,255,0.2);">
+              <td class="ps-3 py-2">
+                <strong class="text-white font-rajdhani" style="font-size: 1.05rem;">{{ p.player_name }}</strong>
+                <div class="d-flex flex-wrap gap-1 align-items-center mt-1">
+                  <span class="badge bg-secondary" style="font-size: 0.7rem;">{{ p.role }}</span>
+                  {% if p.bowling_style %}
+                    <span class="badge bg-dark border text-info" style="font-size: 0.7rem;">{{ p.bowling_style }}</span>
+                  {% endif %}
+                  <span class="badge bg-dark text-info border" style="font-size: 0.7rem;">OVR {{ p.ovr }}</span>
+                </div>
+                <div class="small text-warning mt-1">Base: <strong>₹{{ "%.2f"|format(p.base_price) }} Cr</strong></div>
+              </td>
+              <td class="text-end pe-3 align-middle" id="queue-status-{{ p.id }}">
+                {% if p.status == 'sold' %}
+                  <span class="badge bg-success">SOLD ({{ p.owner_team or p.owner_name }})</span>
+                {% elif p.status == 'active' %}
+                  <span class="badge bg-warning text-dark">ON BLOCK</span>
+                {% elif p.status == 'unsold' %}
+                  <span class="badge bg-secondary">UNSOLD</span>
+                {% else %}
+                  <span class="badge bg-dark border text-light">UPCOMING</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  const AUCTION_ID = {{ auction.id }};
+  const USER_ID = {{ session.user_id }};
+  let userBudget = {{ budget_remaining | float }};
+  let snap = {{ snap | tojson }};
+  let connected = false;
+  let bidInFlight = false;
+  let inFlightTimer = null;
+  let alertTimer = null;
+
+  const socket = io();
+  const $ = id => document.getElementById(id);
+  const money = n => {
+    if (n == null || n === '') return '₹0.00 Cr';
+    let num = parseFloat(n);
+    if (isNaN(num)) return '₹0.00 Cr';
+    if (num >= 10000) num = num / 10000000;
+    return '₹' + num.toFixed(2) + ' Cr';
+  };
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g,
+    c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]);
+
+  // ---- connection ---------------------------------------------------------
+  socket.on('connect', () => {
+    connected = true;
+    socket.emit('join_auction_room', { auction_id: AUCTION_ID });
+  });
+  socket.on('disconnect', () => {
+    connected = false;
+    updateControls();
+    showAlert('Connection lost \u2014 reconnecting\u2026', 'warning');
+  });
+  socket.on('connect_error', () => { connected = false; updateControls(); });
+
+  // ---- rendering ----------------------------------------------------------
+  function setStatusBadge(status) {
+    const b = $('auctionStatusBadge');
+    if (status === 'active')      { b.className = 'badge fs-6 bg-success live-pulse'; b.textContent = '\u25cf LIVE'; }
+    else if (status === 'paused') { b.className = 'badge fs-6 bg-warning text-dark'; b.textContent = 'PAUSED'; }
+    else                          { b.className = 'badge fs-6 bg-secondary'; b.textContent = String(status).toUpperCase(); }
+  }
+
+  function renderPrimaryStats(statsList, role) {
+    const container = $('primaryStatsContainer');
+    const grid = $('primaryStatsGrid');
+    if (!container || !grid) return;
+    grid.innerHTML = '';
+    if (!statsList || statsList.length === 0) {
+      container.style.display = 'none';
+      return;
+    }
+    const roleBadge = $('statsRoleBadge');
+    if (roleBadge) roleBadge.textContent = role || '';
+
+    statsList.forEach(s => {
+      const r = Math.max(0, Math.min(100, parseInt(s.rating) || 0));
+      const cat = s.category || 'Skill';
+      const catColor = cat === 'Batting' ? '#ff9900' : (cat === 'Bowling' ? '#00f5ff' : (cat === 'Keeping' ? '#b84dff' : '#00ff88'));
+      const barColor = r >= 85 ? '#ffcc00' : (r >= 75 ? '#00f5ff' : (r >= 65 ? '#b84dff' : '#6c757d'));
+
+      const col = document.createElement('div');
+      col.className = 'col-6 col-md-4';
+      col.innerHTML = `
+        <div class="p-2 rounded h-100" style="background: #16002c; border: 1px solid rgba(157,0,255,0.35);">
+          <div class="d-flex justify-content-between align-items-center mb-1">
+            <span class="badge" style="background: rgba(0,0,0,0.5); color: ${catColor}; border: 1px solid ${catColor}55; font-size: 0.65rem; padding: 2px 5px;">${esc(cat)}</span>
+            <span class="fw-bold" style="color: ${barColor}; font-size: 0.95rem;">${r}</span>
+          </div>
+          <div class="text-white text-truncate fw-semibold small mb-1" title="${esc(s.name)}">${esc(s.name)}</div>
+          <div class="progress" style="height: 5px; background: #0a0015;">
+            <div class="progress-bar" style="width: ${r}%; background: ${barColor};"></div>
+          </div>
+        </div>`;
+      grid.appendChild(col);
+    });
+    container.style.display = 'block';
+  }
+
+  // One function paints the whole lot from a server snapshot.
+  function renderLot(s) {
+    snap = s;
+    setStatusBadge(s.status);
+    const pill = $('playerStatusPill');
+    if (s.has_lot) {
+      $('playerName').textContent = s.player_name;
+      $('playerRole').textContent = s.role || 'Player';
+      $('playerBowling').textContent = s.bowling_style || '';
+      $('playerOvr').textContent = s.ovr;
+      $('basePriceDisplay').textContent = money(s.base_price);
+      $('currentBidDisplay').textContent = money(s.current_bid);
+      $('bidLabel').textContent = s.has_bids ? 'Current Highest Bid' : 'Opening Bid (Base Price)';
+      $('highestBidderDisplay').textContent = s.has_bids ? s.highest_bidder_name : 'None (Opening)';
+      renderPrimaryStats(s.primary_stats, s.role);
+      $('bidAmountInput').value = parseFloat(s.min_next_bid).toFixed(2);
+      pill.className = s.status === 'paused' ? 'badge bg-warning text-dark' : 'badge bg-primary';
+      pill.textContent = s.status === 'paused' ? 'PAUSED' : 'IN BIDDING';
+    } else {
+      $('playerName').textContent = s.status === 'ended' ? 'Auction has ended' : 'Waiting for Auctioneer...';
+      $('playerRole').textContent = 'Role';
+      $('playerBowling').textContent = 'Bowling';
+      $('playerOvr').textContent = '--';
+      $('basePriceDisplay').textContent = money(0);
+      $('currentBidDisplay').textContent = money(0);
+      $('bidLabel').textContent = 'Current Highest Bid';
+      $('highestBidderDisplay').textContent = 'None (Opening)';
+      if ($('primaryStatsContainer')) $('primaryStatsContainer').style.display = 'none';
+      $('bidAmountInput').value = '';
+      pill.className = 'badge bg-secondary';
+      pill.textContent = s.status === 'ended' ? 'ENDED' : 'WAITING';
+    }
+    bidInFlight = false;
+    updateControls();
+  }
+
+  // Enable/disable bidding and say why, so the UI never lets you click a dead button.
+  function updateControls() {
+    const s = snap;
+    let reason = '';
+    if (!connected)                           reason = 'Reconnecting to the auction\u2026';
+    else if (s.status === 'pending')          reason = 'The auction has not started yet.';
+    else if (s.status === 'paused')           reason = 'Bidding is paused by the auctioneer.';
+    else if (s.status === 'ended')            reason = 'This auction has ended.';
+    else if (!s.has_lot)                      reason = 'Waiting for the next player\u2026';
+    else if (s.highest_bidder_id === USER_ID) reason = 'You hold the highest bid.';
+    else if (userBudget < s.min_next_bid)     reason = `You can't afford the next bid (${money(s.min_next_bid)}). Purse: ${money(userBudget)}.`;
+    else if (bidInFlight)                     reason = 'Placing bid\u2026';
+    else reason = `Minimum next bid: ${money(s.min_next_bid)}`;
+
+    const canBid = !!s.has_lot && connected && s.status === 'active' && !bidInFlight
+      && s.highest_bidder_id !== USER_ID && userBudget >= s.min_next_bid;
+    $('btnPlaceBid').disabled = !canBid;
+    $('bidAmountInput').disabled = !(s.has_lot && s.status === 'active');
+    document.querySelectorAll('.quick-bid-btn').forEach(b => b.disabled = !canBid);
+    $('bidHint').textContent = reason;
+  }
+
+  function setQueueRow(apId, status, label) {
+    const row = $(`queue-row-${apId}`);
+    const cell = $(`queue-status-${apId}`);
+    if (row) {
+      row.className = status === 'active' ? 'table-warning text-dark'
+        : status === 'sold' ? 'table-success text-dark'
+        : status === 'unsold' ? 'text-muted' : '';
+    }
+    if (cell) {
+      const badge = { active: 'bg-warning text-dark', sold: 'bg-success', unsold: 'bg-secondary' }[status] || 'bg-dark border text-light';
+      const text = { active: 'ON BLOCK', sold: `SOLD (${label || ''})`, unsold: 'UNSOLD' }[status] || 'UPCOMING';
+      cell.innerHTML = `<span class="badge ${badge}">${esc(text)}</span>`;
+    }
+  }
+
+  // ---- server events ------------------------------------------------------
+  socket.on('room_joined', s => renderLot(s));   // also re-syncs after a reconnect
+
+  socket.on('player_update', s => {
+    renderLot(s);
+    showAlert(`Now on the block: <strong>${esc(s.player_name)}</strong> (Base: ${money(s.base_price)})`, 'info', true);
+    appendLog(`Lot Started: ${esc(s.player_name)} (Base: ${money(s.base_price)})`);
+    setQueueRow(s.ap_id, 'active');
+  });
+
+  socket.on('bid_update', s => {
+    if (!snap.has_lot || s.ap_id !== snap.ap_id) { renderLot(s); return; }
+    renderLot(s);
+    const isMe = s.highest_bidder_id === USER_ID;
+    appendLog(`<strong>${esc(isMe ? 'You' : s.highest_bidder_name)}</strong> bid <strong>${money(s.current_bid)}</strong>`,
+              isMe ? '#00f5ff' : '#d580ff');
+  });
+
+  socket.on('player_sold', d => {
+    showAlert(`\ud83d\udd28 <strong>SOLD!</strong> ${esc(d.player_name)} sold to <strong>${esc(d.sold_to)}</strong> for <strong>${money(d.sold_price)}</strong>`, 'success', true);
+    appendLog(`SOLD: ${esc(d.player_name)} \u2192 ${esc(d.sold_to)} (${money(d.sold_price)})`, '#00ff88');
+    if (d.buyer_id === USER_ID) {
+      userBudget = parseFloat(d.buyer_budget_remaining);
+      $('userBudgetDisplay').textContent = money(userBudget);
+    }
+    const bBudgetEl = $(`bidder-budget-${d.buyer_id}`);
+    if (bBudgetEl) bBudgetEl.textContent = money(d.buyer_budget_remaining);
+    const bSquadEl = $(`bidder-squad-${d.buyer_id}`);
+    if (bSquadEl && d.buyer_squad_count != null) {
+      bSquadEl.innerHTML = `<i class="bi bi-people me-1"></i>${d.buyer_squad_count}/${snap.max_squad_size || 25}`;
+    }
+    setQueueRow(d.ap_id, 'sold', d.sold_to);
+    renderLot(d.snapshot);
+  });
+
+  socket.on('player_unsold', d => {
+    showAlert(`\u26a0\ufe0f <strong>UNSOLD!</strong> ${esc(d.player_name)} went unsold.`, 'warning', true);
+    appendLog(`UNSOLD: ${esc(d.player_name)}`, '#ffaa00');
+    setQueueRow(d.ap_id, 'unsold');
+    renderLot(d.snapshot);
+  });
+
+  socket.on('auction_paused', s => { renderLot(s); showAlert('Auction has been paused by the auctioneer.', 'warning'); });
+  socket.on('auction_resumed', s => { renderLot(s); showAlert('Auction has resumed.', 'info'); });
+  socket.on('auction_started', () => location.reload());
+  socket.on('auction_ended', () => location.reload());
+
+  socket.on('bid_error', d => {
+    bidInFlight = false;
+    updateControls();
+    showAlert(d.message, 'danger');
+  });
+
+  // ---- bidding ------------------------------------------------------------
+  $('btnPlaceBid').addEventListener('click', () => placeBidAction());
+
+  document.querySelectorAll('.quick-bid-btn').forEach(btn => {
+    btn.addEventListener('click', function () {
+      const inc = parseFloat(this.getAttribute('data-increment'));
+      const amount = Math.round((Math.max(snap.min_next_bid, snap.current_bid + inc)) * 100) / 100;
+      $('bidAmountInput').value = amount.toFixed(2);
+      placeBidAction(amount);
+    });
+  });
+
+  // Enter key submits
+  $('bidAmountInput').addEventListener('keydown', e => { if (e.key === 'Enter') placeBidAction(); });
+
+  function placeBidAction(overrideAmount) {
+    if (bidInFlight) return;
+    const amount = overrideAmount != null ? overrideAmount : parseFloat($('bidAmountInput').value);
+
+    if (!snap.has_lot)  { showAlert('No player is currently on the block.', 'warning'); return; }
+    if (snap.status !== 'active') { showAlert('Bidding is not open right now.', 'warning'); return; }
+    if (isNaN(amount) || amount <= 0) { showAlert('Enter a valid bid amount in Crores (e.g. 1.25).', 'warning'); return; }
+    if (amount < snap.min_next_bid) { showAlert(`Your bid must be at least ${money(snap.min_next_bid)}.`, 'warning'); return; }
+    if (amount > userBudget) { showAlert(`Insufficient purse! You only have ${money(userBudget)} left.`, 'danger'); return; }
+
+    // Lock the button until the server answers (stops double-submits)
+    bidInFlight = true;
+    updateControls();
+    clearTimeout(inFlightTimer);
+    inFlightTimer = setTimeout(() => { bidInFlight = false; updateControls(); }, 4000);
+
+    // Identity is taken from your login session on the server, not from this message.
+    socket.emit('place_bid', { auction_id: AUCTION_ID, ap_id: snap.ap_id, amount: amount });
+  }
+
+  // ---- small UI helpers ---------------------------------------------------
+  function showAlert(msg, type, isHtml) {
+    const box = $('liveAlertBox');
+    box.className = `alert alert-${type} alert-dismissible show`;
+    const txt = $('liveAlertText');
+    if (isHtml) txt.innerHTML = msg; else txt.textContent = msg;
+    box.style.display = 'block';
+    clearTimeout(alertTimer);
+    if (type !== 'danger') alertTimer = setTimeout(hideAlert, 8000);
+  }
+  function hideAlert() { $('liveAlertBox').style.display = 'none'; }
+
+  function appendLog(msg, color) {
+    const container = $('bidLogContainer');
+    const prompt = $('emptyLogPrompt');
+    if (prompt) prompt.style.display = 'none';
+    const item = document.createElement('div');
+    item.className = 'bid-log-item text-white';
+    if (color) item.style.borderLeftColor = color;
+    item.innerHTML = `<small class="text-muted me-2">[${new Date().toLocaleTimeString()}]</small> ${msg}`;
+    container.insertBefore(item, container.firstChild);
+    while (container.children.length > 200) container.removeChild(container.lastChild);
+  }
+
+  renderLot(snap);   // paint from the server-rendered snapshot immediately
+</script>
+{% endblock %}

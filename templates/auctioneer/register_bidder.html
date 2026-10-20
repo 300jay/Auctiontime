@@ -1,0 +1,222 @@
+{% extends "base.html" %}
+{% block title %}Register Bidder — Cricket Auction{% endblock %}
+
+{% block content %}
+<div class="page-container page-narrow">
+
+    <div class="page-header">
+        <div>
+            <a href="{{ url_for('auctioneer_dashboard') }}" class="breadcrumb-link">← Dashboard</a>
+            <h1 class="page-title"><span class="title-icon">👤</span> REGISTER NEW BIDDER</h1>
+            <p class="page-subtitle">Create a bidder account to participate in auctions</p>
+        </div>
+    </div>
+
+    <div class="form-card">
+        <form method="POST" action="{{ url_for('register_bidder') }}" novalidate id="registerBidderForm">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined else '' }}">
+
+            <!-- Username -->
+            <div class="form-group">
+                <label class="form-label" for="username">
+                    Username <span class="required-star">*</span>
+                </label>
+                <p class="form-hint">Unique identifier for the bidder's account</p>
+                <div class="input-wrapper">
+                    <span class="input-icon">👤</span>
+                    <input
+                        type="text"
+                        id="username"
+                        name="username"
+                        class="form-input"
+                        placeholder="e.g. team_alpha"
+                        maxlength="50"
+                        required
+                        autocomplete="off"
+                        value="{{ request.form.get('username', '') }}"
+                    >
+                </div>
+                <div id="usernameValidation" class="field-validation"></div>
+            </div>
+
+            <!-- Password -->
+            <div class="form-group">
+                <label class="form-label" for="password">
+                    Password <span class="required-star">*</span>
+                </label>
+                <p class="form-hint">Minimum 6 characters</p>
+                <div class="input-wrapper">
+                    <span class="input-icon">🔒</span>
+                    <input
+                        type="password"
+                        id="password"
+                        name="password"
+                        class="form-input"
+                        placeholder="Enter a secure password"
+                        minlength="6"
+                        required
+                        autocomplete="new-password"
+                    >
+                    <button type="button" class="eye-toggle" data-target="password" aria-label="Show/hide password">👁</button>
+                </div>
+                <!-- Password strength bar -->
+                <div class="password-strength-bar">
+                    <div class="strength-fill" id="strengthFill"></div>
+                </div>
+                <p class="strength-label" id="strengthLabel"></p>
+            </div>
+
+            <!-- Confirm Password -->
+            <div class="form-group">
+                <label class="form-label" for="confirm_password">
+                    Confirm Password <span class="required-star">*</span>
+                </label>
+                <div class="input-wrapper">
+                    <span class="input-icon">🔒</span>
+                    <input
+                        type="password"
+                        id="confirm_password"
+                        name="confirm_password"
+                        class="form-input"
+                        placeholder="Re-enter the password"
+                        required
+                        autocomplete="new-password"
+                    >
+                    <button type="button" class="eye-toggle" data-target="confirm_password" aria-label="Show/hide password">👁</button>
+                </div>
+                <div id="confirmValidation" class="field-validation"></div>
+            </div>
+
+            <!-- Info Box -->
+            <div class="info-box">
+                <span class="info-box-icon">ℹ️</span>
+                <div>
+                    <strong>Note:</strong> The bidder will use these credentials to log in.
+                    Share the username and password with the team owner securely.
+                </div>
+            </div>
+
+            <!-- Submit -->
+            <div class="form-actions">
+                <a href="{{ url_for('auctioneer_dashboard') }}" class="btn btn-ghost">Cancel</a>
+                <button type="submit" class="btn btn-primary btn-large" id="submitBtn">
+                    <span>👤</span> CREATE BIDDER ACCOUNT
+                </button>
+            </div>
+
+        </form>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Eye toggles
+    document.querySelectorAll('.eye-toggle').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            const targetId = this.dataset.target;
+            const input = document.getElementById(targetId);
+            if (!input) return;
+            const isPassword = input.type === 'password';
+            input.type = isPassword ? 'text' : 'password';
+            this.textContent = isPassword ? '🙈' : '👁';
+        });
+    });
+
+    // Password strength
+    const passwordInput = document.getElementById('password');
+    const strengthFill  = document.getElementById('strengthFill');
+    const strengthLabel = document.getElementById('strengthLabel');
+
+    function getStrength(pw) {
+        let score = 0;
+        if (pw.length >= 6)  score++;
+        if (pw.length >= 10) score++;
+        if (/[A-Z]/.test(pw)) score++;
+        if (/[0-9]/.test(pw)) score++;
+        if (/[^A-Za-z0-9]/.test(pw)) score++;
+        return score;
+    }
+
+    const strengthLevels = [
+        { label: '',          color: 'transparent', width: '0%'   },
+        { label: 'Very Weak', color: '#ff2851',      width: '20%'  },
+        { label: 'Weak',      color: '#ff8c00',      width: '40%'  },
+        { label: 'Fair',      color: '#ffc800',      width: '60%'  },
+        { label: 'Strong',    color: '#00e5ff',      width: '80%'  },
+        { label: 'Very Strong', color: '#00ff87',    width: '100%' },
+    ];
+
+    if (passwordInput && strengthFill && strengthLabel) {
+        passwordInput.addEventListener('input', function () {
+            const score = getStrength(this.value);
+            const level = this.value ? strengthLevels[Math.min(score, 5)] : strengthLevels[0];
+            strengthFill.style.width      = level.width;
+            strengthFill.style.background = level.color;
+            strengthLabel.textContent     = level.label;
+            strengthLabel.style.color     = level.color;
+        });
+    }
+
+    // Confirm password match
+    const confirmInput      = document.getElementById('confirm_password');
+    const confirmValidation = document.getElementById('confirmValidation');
+
+    function validateConfirm() {
+        if (!confirmInput.value) {
+            confirmValidation.textContent = '';
+            confirmValidation.className   = 'field-validation';
+            return;
+        }
+        if (confirmInput.value === passwordInput.value) {
+            confirmValidation.textContent = '✓ Passwords match';
+            confirmValidation.className   = 'field-validation valid';
+        } else {
+            confirmValidation.textContent = '✗ Passwords do not match';
+            confirmValidation.className   = 'field-validation invalid';
+        }
+    }
+
+    if (confirmInput) {
+        confirmInput.addEventListener('input', validateConfirm);
+        passwordInput.addEventListener('input', validateConfirm);
+    }
+
+    // Form validation on submit
+    const form      = document.getElementById('registerBidderForm');
+    const submitBtn = document.getElementById('submitBtn');
+    if (form) {
+        form.addEventListener('submit', function (e) {
+            const pw  = document.getElementById('password').value;
+            const cpw = document.getElementById('confirm_password').value;
+            if (pw !== cpw) {
+                e.preventDefault();
+                validateConfirm();
+                document.getElementById('confirm_password').focus();
+                return;
+            }
+            submitBtn.disabled     = true;
+            submitBtn.textContent  = 'Creating Account…';
+        });
+    }
+
+    // Username validation (alphanumeric + underscore only)
+    const usernameInput      = document.getElementById('username');
+    const usernameValidation = document.getElementById('usernameValidation');
+    if (usernameInput) {
+        usernameInput.addEventListener('input', function () {
+            const val = this.value;
+            if (!val) { usernameValidation.textContent = ''; return; }
+            const valid = /^[a-zA-Z0-9_]{3,50}$/.test(val);
+            if (valid) {
+                usernameValidation.textContent = '✓ Valid username';
+                usernameValidation.className   = 'field-validation valid';
+            } else {
+                usernameValidation.textContent = '✗ 3–50 chars, letters/numbers/underscore only';
+                usernameValidation.className   = 'field-validation invalid';
+            }
+        });
+    }
+</script>
+{% endblock %}

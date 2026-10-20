@@ -1,0 +1,262 @@
+{% extends "base.html" %}
+{% block title %}Manage Auction — {{ auction.name }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h2><i class="bi bi-gear"></i> {{ auction.name }}</h2>
+    <div class="d-flex gap-3 text-muted small">
+      <span><i class="bi bi-wallet2 text-info me-1"></i> Budget/Team: <strong class="text-white">₹{{ "%.2f"|format(auction.budget_per_team) }} Cr</strong></span>
+      <span><i class="bi bi-people text-warning me-1"></i> Squad: <strong class="text-white">Min {{ auction.min_squad_size or 15 }} &middot; Max {{ auction.max_squad_size or 25 }}</strong></span>
+    </div>
+  </div>
+  <div class="d-flex gap-2">
+    <span class="badge fs-6
+      {% if auction.status == 'active' %}bg-success
+      {% elif auction.status == 'paused' %}bg-warning text-dark
+      {% elif auction.status == 'ended' %}bg-secondary
+      {% else %}bg-info text-dark{% endif %}">
+      {{ auction.status }}
+    </span>
+    <a href="{{ url_for('host_auction', id=auction.id) }}" class="btn btn-primary">
+      <i class="bi bi-broadcast"></i> Host Live
+    </a>
+  </div>
+</div>
+
+<!-- Invite Link -->
+<div class="card mb-4">
+  <div class="card-header"><i class="bi bi-link-45deg"></i> Invite Link</div>
+  <div class="card-body">
+    <div class="input-group">
+      <input type="text" class="form-control font-monospace" id="inviteUrl" value="{{ invite_url }}" readonly />
+      <button class="btn btn-outline-primary" onclick="navigator.clipboard.writeText(document.getElementById('inviteUrl').value)">
+        <i class="bi bi-clipboard"></i> Copy
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="row g-4">
+  <!-- Bidders -->
+  <div class="col-lg-5">
+    <div class="card h-100">
+      <div class="card-header"><i class="bi bi-people"></i> Bidders ({{ bidders|length }})</div>
+      <div class="card-body">
+        <form method="POST" action="{{ url_for('add_bidder', id=auction.id) }}" class="d-flex gap-2 mb-3">
+          <input type="text" name="username" class="form-control" placeholder="Search bidder username" />
+          <button type="submit" class="btn btn-primary"><i class="bi bi-plus"></i></button>
+        </form>
+        {% if bidders %}
+        <table class="table table-sm align-middle">
+          <thead><tr><th>User</th><th>Team</th><th>Purse Left</th><th>Squad</th><th></th></tr></thead>
+          <tbody>
+            {% for b in bidders %}
+            <tr>
+              <td><strong class="text-white">{{ b.username }}</strong></td>
+              <td>
+                {% if b.team_logo %}
+                  <img src="/static/uploads/{{ b.team_logo }}" style="width: 24px; height: 24px; object-fit: contain; border-radius: 50%;" class="me-1">
+                {% endif %}
+                {{ b.team_name or '—' }}
+              </td>
+              <td class="text-info fw-bold">₹{{ "%.2f"|format(b.budget_remaining) }} Cr</td>
+              <td><span class="badge bg-dark border text-light">{{ b.squad_count or 0 }}/{{ auction.max_squad_size or 25 }}</span></td>
+              <td>
+                <form method="POST" action="{{ url_for('remove_bidder', id=auction.id) }}" class="d-inline">
+                  <input type="hidden" name="user_id" value="{{ b.user_id }}" />
+                  <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Remove this bidder?')">
+                    <i class="bi bi-trash"></i>
+                  </button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <p class="text-muted small">No bidders added yet.</p>
+        {% endif %}
+        <div class="mt-2">
+          <a href="{{ url_for('register_bidder') }}" class="btn btn-sm btn-outline-primary">
+            <i class="bi bi-person-plus"></i> Register New Bidder
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Players Queue -->
+  <div class="col-lg-7">
+    <div class="card h-100">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-person-badge text-info me-2"></i> Player Queue ({{ players|length }})</span>
+      </div>
+      <div class="card-body">
+
+        <!-- 1. Upload CSV from Local PC -->
+        <div class="p-3 mb-3 rounded" style="background: rgba(157,0,255,0.08); border: 1.5px dashed rgba(157,0,255,0.5);">
+          <div class="d-flex align-items-center gap-2 mb-2">
+            <i class="bi bi-file-earmark-spreadsheet-fill text-success fs-5"></i>
+            <h6 class="mb-0 text-white font-rajdhani fw-bold">UPLOAD PLAYERS CSV FROM LOCAL PC</h6>
+          </div>
+          <form method="POST" action="{{ url_for('upload_auction_csv', id=auction.id) }}" enctype="multipart/form-data">
+            <div class="mb-2">
+              <label class="form-label small text-muted mb-1">Select CSV File from your computer</label>
+              <input type="file" name="csv_file" class="form-control form-control-sm" accept=".csv" required>
+            </div>
+            <div class="row g-2 align-items-center mb-2">
+              <div class="col-sm-7">
+                <label class="form-label small text-muted mb-1">Base Price Policy</label>
+                <select name="default_base_price" class="form-select form-select-sm">
+                  <option value="" selected>Auto by OVR (>=85: 2Cr, 80-84: 1.5Cr, 75-79: 1Cr, 70-74: 0.5Cr, 65-69: 0.3Cr, &lt;65: 0.2Cr)</option>
+                  <option value="2.0">Fixed: ₹2.00 Cr</option>
+                  <option value="1.5">Fixed: ₹1.50 Cr</option>
+                  <option value="1.0">Fixed: ₹1.00 Cr</option>
+                  <option value="0.5">Fixed: ₹0.50 Cr</option>
+                  <option value="0.2">Fixed: ₹0.20 Cr</option>
+                </select>
+              </div>
+              <div class="col-sm-5 pt-3">
+                <div class="form-check small">
+                  <input class="form-check-input" type="checkbox" name="clear_existing" value="1" id="clearExistingCheck">
+                  <label class="form-check-label text-light" for="clearExistingCheck">Clear pending queue first</label>
+                </div>
+              </div>
+            </div>
+            <button type="submit" class="btn btn-sm btn-success w-100 fw-bold shadow-sm">
+              <i class="bi bi-cloud-arrow-up-fill me-1"></i> Upload & Import CSV Players
+            </button>
+          </form>
+        </div>
+
+        <!-- 2. Or Search & Add Individual Player -->
+        <div class="mb-3 p-3 rounded" style="background: rgba(0,0,0,0.3); border: 1px solid rgba(157,0,255,0.2);">
+          <label class="form-label small text-muted mb-1"><i class="bi bi-search me-1"></i> Or Search Individual Player from Database</label>
+          <div class="input-group input-group-sm mb-2">
+            <input type="text" id="playerSearch" class="form-control" placeholder="Type player name (e.g. Bumrah, Shadab)..." />
+            <button class="btn btn-outline-primary" onclick="searchPlayers()"><i class="bi bi-search"></i> Search</button>
+          </div>
+          <div id="searchResults" class="list-group mb-2" style="max-height:220px;overflow-y:auto;"></div>
+
+          <form method="POST" action="{{ url_for('add_player', id=auction.id) }}" id="addPlayerForm">
+            <input type="hidden" name="offset_hex" id="selectedOffset" />
+            <div class="d-none" id="selectedPlayerInfo">
+              <div class="alert alert-info py-2 small mb-2" id="selectedPlayerLabel"></div>
+              <div class="input-group input-group-sm mb-2">
+                <span class="input-group-text bg-dark border-purple text-info">Base Price ₹</span>
+                <input type="number" name="base_price" class="form-control" placeholder="Leave blank for Auto by OVR" step="0.1" min="0.2" />
+                <span class="input-group-text bg-dark border-purple text-info">Cr</span>
+              </div>
+              <button type="submit" class="btn btn-primary btn-sm w-100">
+                <i class="bi bi-plus-lg me-1"></i> Add to Auction Queue
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <hr style="border-color: rgba(157,0,255,0.3);" />
+
+        <!-- Queue Table -->
+        {% if players %}
+        <div style="overflow-x: auto; max-height: 400px; overflow-y: auto;">
+          <table class="table table-sm table-hover align-middle mb-0">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Player</th>
+                <th>Role / Bowling Style</th>
+                <th>OVR</th>
+                <th>Base Price</th>
+                <th>Status</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for p in players %}
+              <tr>
+                <td>{{ p.queue_order }}</td>
+                <td><strong class="text-white">{{ p.player_name }}</strong></td>
+                <td>
+                  <span class="badge bg-secondary small">{{ p.role }}</span>
+                  {% if p.bowling_style %}
+                    <span class="badge bg-dark border text-info small">{{ p.bowling_style }}</span>
+                  {% endif %}
+                </td>
+                <td><span class="badge bg-dark border text-info fw-bold">{{ p.ovr }}</span></td>
+                <td class="text-warning fw-bold">₹{{ "%.2f"|format(p.base_price) }} Cr</td>
+                <td>
+                  <span class="badge
+                    {% if p.status == 'sold' %}bg-success
+                    {% elif p.status == 'unsold' %}bg-secondary
+                    {% elif p.status == 'active' %}bg-warning text-dark
+                    {% else %}bg-dark border text-light{% endif %}">
+                    {{ p.status | upper }}
+                    {% if p.status == 'sold' %} ({{ p.owner_name }}){% endif %}
+                  </span>
+                </td>
+                <td>
+                  {% if p.status == 'pending' %}
+                  <form method="POST" action="{{ url_for('remove_player', id=auction.id) }}" class="d-inline">
+                    <input type="hidden" name="ap_id" value="{{ p.id }}" />
+                    <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2" title="Remove">
+                      <i class="bi bi-trash"></i>
+                    </button>
+                  </form>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="text-center py-4 text-muted">
+          <i class="bi bi-inbox fs-2 d-block mb-2"></i>
+          <p class="mb-0">No players added to the queue yet. Upload a CSV or search above!</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  const auctionId = {{ auction.id }};
+
+  async function searchPlayers() {
+    const q = document.getElementById('playerSearch').value.trim();
+    if (!q) return;
+    const res = await fetch(`/auctioneer/auction/${auctionId}/player_search?q=${encodeURIComponent(q)}`);
+    const data = await res.json();
+    const container = document.getElementById('searchResults');
+    container.innerHTML = '';
+    if (!data.length) {
+      container.innerHTML = '<div class="list-group-item text-muted small">No results found.</div>';
+      return;
+    }
+    data.forEach(p => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'list-group-item list-group-item-action list-group-item-dark d-flex justify-content-between align-items-center';
+      btn.innerHTML = `<span><strong>${p.name}</strong> <small class="text-muted">${p.role}</small></span><span class="badge bg-primary">OVR ${p.ovr}</span>`;
+      btn.onclick = () => selectPlayer(p);
+      container.appendChild(btn);
+    });
+  }
+
+  function selectPlayer(p) {
+    document.getElementById('selectedOffset').value = p.offset_hex;
+    document.getElementById('selectedPlayerLabel').textContent =
+      `Selected: ${p.name} | ${p.role} | ${p.bowling_style} | OVR ${p.ovr}`;
+    document.getElementById('selectedPlayerInfo').classList.remove('d-none');
+    document.getElementById('searchResults').innerHTML = '';
+    document.getElementById('playerSearch').value = '';
+  }
+
+  document.getElementById('playerSearch').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') { e.preventDefault(); searchPlayers(); }
+  });
+</script>
+{% endblock %}

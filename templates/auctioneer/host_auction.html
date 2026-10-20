@@ -1,0 +1,395 @@
+{% extends "base.html" %}
+{% block title %}Host — {{ auction.name }}{% endblock %}
+
+{% block extra_style %}
+.live-badge { animation: pulse 1.5s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+.player-card {
+  background: linear-gradient(135deg, #2a005a, #1a0033);
+  border: 2px solid #9d00ff;
+  border-radius: 12px;
+  padding: 2rem;
+  text-align: center;
+}
+.bid-display { font-size: 3rem; font-weight: 900; color: #d580ff; }
+.bidder-row { transition: background 0.3s; }
+.bidder-row.highest { background: rgba(157,0,255,0.2) !important; }
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2><i class="bi bi-broadcast"></i> {{ auction.name }} — Host View</h2>
+  <div class="d-flex gap-2 align-items-center">
+    <span id="statusBadge" class="badge fs-6
+      {% if auction.status == 'active' %}bg-success live-badge
+      {% elif auction.status == 'paused' %}bg-warning text-dark
+      {% elif auction.status == 'ended' %}bg-secondary
+      {% else %}bg-info text-dark{% endif %}">
+      {{ auction.status }}
+    </span>
+    {% if auction.status == 'pending' %}
+    <form method="POST" action="{{ url_for('start_auction', id=auction.id) }}" class="d-inline">
+      <button class="btn btn-success"><i class="bi bi-play-fill"></i> Start</button>
+    </form>
+    {% elif auction.status in ['active', 'paused'] %}
+    <form method="POST" action="{{ url_for('end_auction', id=auction.id) }}" class="d-inline">
+      <button class="btn btn-danger" onclick="return confirm('End this auction?')">
+        <i class="bi bi-stop-fill"></i> End
+      </button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+<div id="hostAlert" class="alert alert-danger alert-dismissible show" role="alert" style="display:none;">
+  <span id="hostAlertText"></span>
+  <button type="button" class="btn-close" aria-label="Close" onclick="hideHostAlert()"></button>
+</div>
+
+<div class="row g-4">
+  <!-- Left: Player Queue -->
+  <div class="col-lg-4">
+    <div class="card h-100">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-list-ol text-info me-1"></i> Player Queue</span>
+        <span class="badge bg-dark border text-light">{{ players | length }} total</span>
+      </div>
+      <div class="card-body p-0" style="overflow-y:auto; max-height:75vh;">
+        <table class="table table-sm align-middle mb-0">
+          <tbody id="playerQueueBody">
+            {% for p in players %}
+            <tr class="player-queue-row {% if p.status == 'active' %}table-warning{% elif p.status == 'sold' %}table-success{% elif p.status == 'unsold' %}table-secondary{% endif %}"
+                id="row-{{ p.id }}" data-ap-id="{{ p.id }}" data-status="{{ p.status }}"
+                data-owner="{{ p.owner_team or p.owner_name or '' }}"
+                style="border-bottom: 1px solid rgba(157,0,255,0.2);">
+              <td class="ps-3 py-2">
+                <strong class="text-white font-rajdhani" style="font-size: 1.05rem;">{{ p.player_name }}</strong><br/>
+                <span class="badge bg-secondary" style="font-size:0.7rem;">{{ p.role }}</span>
+                {% if p.bowling_style %}
+                  <span class="badge bg-dark border text-info" style="font-size:0.7rem;">{{ p.bowling_style }}</span>
+                {% endif %}
+                <span class="badge bg-dark text-warning border border-warning" style="font-size:0.7rem;">OVR {{ p.ovr }}</span>
+                <div class="small text-info mt-1">Base: <strong>₹{{ "%.2f"|format(p.base_price) }} Cr</strong></div>
+              </td>
+              <td class="text-end pe-2" id="host-status-{{ p.id }}"></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Center: Live Bidding Panel -->
+  <div class="col-lg-5">
+    <div class="player-card mb-3 p-4" id="currentPlayerCard" style="background: #110022; border: 2px solid #9d00ff; border-radius: 12px; box-shadow: 0 0 20px rgba(157,0,255,0.3);">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <span class="badge bg-secondary" id="currentPlayerRole">—</span>
+        <span class="badge bg-dark border text-warning fs-6" id="currentPlayerOvr">OVR --</span>
+      </div>
+      <h2 id="currentPlayerName" class="mb-1 text-white font-rajdhani fw-bold" style="letter-spacing: 1px;">No player selected</h2>
+      <p class="small mb-3" style="color: #c4a8ff;" id="currentPlayerStyle">—</p>
+      
+      <div class="p-3 my-2 rounded text-center" style="background: #090014; border: 1.5px solid rgba(157,0,255,0.4);">
+        <p class="small mb-1 text-uppercase fw-bold" style="color: #c4a8ff;">Current Highest Bid</p>
+        <div class="glow-bid mb-2" id="currentBidDisplay" style="font-size: 2.2rem; font-weight: 800; color: #00f5ff; font-family: 'Rajdhani', sans-serif;">—</div>
+        <div id="highestBidderDisplay" class="fs-5 fw-bold text-warning">—</div>
+      </div>
+
+      <!-- Primary Attributes / Specialties Breakdown (role-based) -->
+      <div id="hostPrimaryStatsContainer" class="p-3 my-3 rounded text-start" style="background: #090014; border: 1px solid rgba(157,0,255,0.3); display: none;">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <span class="small text-uppercase fw-bold text-info">
+            <i class="bi bi-bar-chart-fill me-1"></i> KEY ATTRIBUTES & SPECIALTIES
+          </span>
+          <span class="badge bg-dark border text-info" id="hostPrimaryRoleBadge"></span>
+        </div>
+        <div class="row g-2" id="hostPrimaryStatsGrid"></div>
+      </div>
+    </div>
+
+    <!-- Controls -->
+    <div class="card">
+      <div class="card-body d-flex flex-wrap gap-2">
+        <button id="btnSell" class="btn btn-success flex-fill" disabled>
+          <i class="bi bi-hammer"></i> <span id="sellLabel">SELL</span>
+        </button>
+        <button id="btnUnsold" class="btn btn-secondary flex-fill" disabled>
+          <i class="bi bi-x-circle"></i> UNSOLD
+        </button>
+        <button id="btnPause" class="btn btn-warning flex-fill" disabled>
+          <i class="bi bi-pause-fill"></i> <span id="pauseLabel">PAUSE</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right: Bidders in Lobby -->
+  <div class="col-lg-3">
+    <div class="card h-100">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-people text-info me-1"></i> Franchise Bidders</span>
+        <span class="badge bg-dark border text-light">{{ bidders | length }}</span>
+      </div>
+      <div class="card-body p-2" style="max-height: 75vh; overflow-y: auto;" id="biddersBody">
+        {% for b in bidders %}
+        <div class="bidder-card p-3 rounded mb-2" id="bidder-row-{{ b.user_id }}"
+             style="background: linear-gradient(135deg, {{ b.color_primary or '#9d00ff' }}26 0%, {{ b.color_secondary or '#1a0033' }}99 100%);
+                    border: 2px solid {{ b.color_primary or '#9d00ff' }};
+                    box-shadow: 0 4px 12px {{ b.color_primary or '#9d00ff' }}22;">
+          <div class="d-flex align-items-center gap-3">
+            {% if b.team_logo %}
+              <img src="/static/uploads/{{ b.team_logo }}" alt="Logo" class="rounded-circle"
+                   style="width: 46px; height: 46px; object-fit: contain; background: rgba(0,0,0,0.5); border: 2px solid {{ b.color_primary or '#9d00ff' }};">
+            {% else %}
+              <div class="rounded-circle d-flex align-items-center justify-content-center text-white fw-bold"
+                   style="width: 46px; height: 46px; background: {{ b.color_primary or '#9d00ff' }}; border: 2px solid rgba(255,255,255,0.2); font-size: 1.1rem;">
+                {{ (b.team_name or b.username)[:2]|upper }}
+              </div>
+            {% endif %}
+            <div class="flex-grow-1 min-w-0">
+              <h6 class="mb-0 text-white fw-bold text-truncate" title="{{ b.team_name or b.username }}">
+                {{ b.team_name if b.team_name else b.username }}
+              </h6>
+              <div class="small" style="color: #c4a8ff;">@{{ b.username }}</div>
+              <div class="d-flex justify-content-between align-items-center mt-2">
+                <span class="badge bg-dark border" style="border-color: {{ b.color_primary or '#9d00ff' }} !important; color: #00f5ff; font-weight: 700;">
+                  <i class="bi bi-wallet2 me-1"></i><span id="budget-{{ b.user_id }}">₹{{ "%.2f"|format(b.budget_remaining) }} Cr</span>
+                </span>
+                <span class="badge bg-dark text-light border border-secondary" id="squad-{{ b.user_id }}">
+                  <i class="bi bi-people me-1"></i>{{ b.squad_count or 0 }}/{{ auction.max_squad_size or 25 }}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  const auctionId = {{ auction.id }};
+  let snap = {{ snap | tojson }};
+  let connected = false;
+  let alertTimer = null;
+
+  const socket = io();
+  const $ = id => document.getElementById(id);
+  const money = n => {
+    if (n == null || n === '') return '₹0.00 Cr';
+    let num = parseFloat(n);
+    if (isNaN(num)) return '₹0.00 Cr';
+    if (num >= 10000) num = num / 10000000;
+    return '₹' + num.toFixed(2) + ' Cr';
+  };
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g,
+    c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]);
+
+  // Re-join on every (re)connect so a dropped connection resyncs instead of going deaf.
+  socket.on('connect', () => { connected = true; socket.emit('join_auction_room', { auction_id: auctionId }); });
+  socket.on('disconnect', () => { connected = false; renderAll(); showHostAlert('Connection lost \u2014 reconnecting\u2026'); });
+  socket.on('room_joined', s => { snap = s; renderQueueAll(); renderAll(); hideHostAlert(); });
+  socket.on('host_error', d => showHostAlert(d.message));
+  socket.on('bid_error', d => showHostAlert(d.message));
+
+  // ---- actions (all validated again on the server) ------------------------
+  $('playerQueueBody').addEventListener('click', e => {
+    const btn = e.target.closest('.js-offer');
+    if (!btn || btn.disabled) return;
+    socket.emit('auctioneer_next_player', { auction_id: auctionId, ap_id: parseInt(btn.dataset.apId, 10) });
+  });
+  $('btnSell').addEventListener('click', () => {
+    if (!snap.has_lot || !snap.has_bids) return;
+    $('btnSell').disabled = true;   // no double-sell from a double click
+    socket.emit('auctioneer_sell', { auction_id: auctionId, ap_id: snap.ap_id });
+  });
+  $('btnUnsold').addEventListener('click', () => {
+    if (!snap.has_lot) return;
+    if (snap.has_bids && !confirm(`${snap.player_name} has bids (${money(snap.current_bid)}). Mark unsold and discard them?`)) return;
+    $('btnUnsold').disabled = true;
+    socket.emit('auctioneer_unsold', { auction_id: auctionId, ap_id: snap.ap_id });
+  });
+  $('btnPause').addEventListener('click', () => {
+    socket.emit(snap.status === 'paused' ? 'auctioneer_resume' : 'auctioneer_pause', { auction_id: auctionId });
+  });
+
+  // ---- rendering ----------------------------------------------------------
+  function renderPrimaryStats(statsList, role) {
+    const container = $('hostPrimaryStatsContainer');
+    const grid = $('hostPrimaryStatsGrid');
+    if (!container || !grid) return;
+    grid.innerHTML = '';
+    if (!statsList || statsList.length === 0) {
+      container.style.display = 'none';
+      return;
+    }
+    const roleBadge = $('hostPrimaryRoleBadge');
+    if (roleBadge) roleBadge.textContent = role || '';
+
+    statsList.forEach(s => {
+      const r = Math.max(0, Math.min(100, parseInt(s.rating) || 0));
+      const cat = s.category || 'Skill';
+      const catColor = cat === 'Batting' ? '#ff9900' : (cat === 'Bowling' ? '#00f5ff' : (cat === 'Keeping' ? '#b84dff' : '#00ff88'));
+      const barColor = r >= 85 ? '#ffcc00' : (r >= 75 ? '#00f5ff' : (r >= 65 ? '#b84dff' : '#6c757d'));
+
+      const col = document.createElement('div');
+      col.className = 'col-6 col-md-4';
+      col.innerHTML = `
+        <div class="p-2 rounded h-100" style="background: #16002c; border: 1px solid rgba(157,0,255,0.35);">
+          <div class="d-flex justify-content-between align-items-center mb-1">
+            <span class="badge" style="background: rgba(0,0,0,0.5); color: ${catColor}; border: 1px solid ${catColor}55; font-size: 0.65rem; padding: 2px 5px;">${esc(cat)}</span>
+            <span class="fw-bold" style="color: ${barColor}; font-size: 0.95rem;">${r}</span>
+          </div>
+          <div class="text-white text-truncate fw-semibold small mb-1" title="${esc(s.name)}">${esc(s.name)}</div>
+          <div class="progress" style="height: 5px; background: #0a0015;">
+            <div class="progress-bar" style="width: ${r}%; background: ${barColor};"></div>
+          </div>
+        </div>`;
+      grid.appendChild(col);
+    });
+    container.style.display = 'block';
+  }
+
+  function setStatusBadge(status) {
+    const b = $('statusBadge');
+    b.textContent = status;
+    b.className = 'badge fs-6 ' + ({
+      active: 'bg-success live-badge', paused: 'bg-warning text-dark', ended: 'bg-secondary'
+    }[status] || 'bg-info text-dark');
+  }
+
+  // Queue cell for one player: offer button, live badge, or result badge.
+  function setRow(apId, status, owner) {
+    const row = $(`row-${apId}`);
+    const cell = $(`host-status-${apId}`);
+    if (!row || !cell) return;
+    row.dataset.status = status;
+    if (owner !== undefined) row.dataset.owner = owner;
+    row.classList.remove('table-warning', 'table-success', 'table-secondary');
+    if (status === 'active') row.classList.add('table-warning');
+    if (status === 'sold') row.classList.add('table-success');
+    if (status === 'unsold') row.classList.add('table-secondary');
+
+    if (status === 'pending' || status === 'unsold') {
+      const icon = status === 'unsold' ? 'bi-arrow-repeat' : 'bi-arrow-right-circle';
+      const tip = status === 'unsold' ? 'Offer again' : 'Put on the block';
+      cell.innerHTML = (status === 'unsold' ? '<span class="badge bg-secondary me-1">UNSOLD</span>' : '') +
+        `<button class="btn btn-sm btn-outline-primary js-offer" data-ap-id="${apId}" title="${tip}"><i class="bi ${icon}"></i></button>`;
+    } else if (status === 'active') {
+      cell.innerHTML = '<span class="badge bg-warning text-dark">LIVE</span>';
+    } else {
+      cell.innerHTML = `<span class="badge bg-success">SOLD${row.dataset.owner ? ' \u2022 ' + esc(row.dataset.owner) : ''}</span>`;
+    }
+  }
+
+  // You can only offer a player when the auction is running and nothing is on the block.
+  function updateOfferButtons() {
+    const ok = connected && snap.status === 'active' && !snap.has_lot;
+    document.querySelectorAll('.js-offer').forEach(b => { b.disabled = !ok; });
+  }
+
+  // Full redraw of the (long) queue: only on first load and after a reconnect.
+  function renderQueueAll() {
+    document.querySelectorAll('.player-queue-row').forEach(r => {
+      let st = r.dataset.status;
+      if (st === 'active' && !(snap.has_lot && String(snap.ap_id) === r.dataset.apId)) st = 'pending';
+      setRow(r.dataset.apId, st);
+    });
+    updateOfferButtons();
+  }
+
+  function renderAll() {
+    const s = snap;
+    setStatusBadge(s.status);
+    const running = connected && s.status === 'active';
+
+    if (s.has_lot) {
+      $('currentPlayerName').textContent = s.player_name;
+      $('currentPlayerRole').textContent = s.role || '\u2014';
+      $('currentPlayerStyle').textContent = (s.bowling_style ? `Style: ${s.bowling_style} | ` : '') + 'Base: ' + money(s.base_price);
+      if ($('currentPlayerOvr')) $('currentPlayerOvr').textContent = 'OVR ' + s.ovr;
+      $('currentBidDisplay').textContent = money(s.current_bid);
+      $('highestBidderDisplay').textContent = s.has_bids
+        ? '\ud83c\udfc6 ' + s.highest_bidder_name
+        : 'No bids yet (base ' + money(s.base_price) + ')';
+      renderPrimaryStats(s.primary_stats, s.role);
+    } else {
+      $('currentPlayerName').textContent = s.status === 'ended' ? 'Auction ended' : 'No player selected';
+      $('currentPlayerRole').textContent = '\u2014';
+      $('currentPlayerStyle').textContent = '\u2014';
+      if ($('currentPlayerOvr')) $('currentPlayerOvr').textContent = 'OVR --';
+      $('currentBidDisplay').textContent = '\u2014';
+      if (!$('highestBidderDisplay').dataset.keep) $('highestBidderDisplay').textContent = '\u2014';
+      if ($('hostPrimaryStatsContainer')) $('hostPrimaryStatsContainer').style.display = 'none';
+    }
+
+    // Buttons only enabled when the action is actually legal
+    $('btnSell').disabled = !(running && s.has_lot && s.has_bids);
+    $('sellLabel').textContent = s.has_lot && s.has_bids ? `SELL (${money(s.current_bid)})` : 'SELL';
+    $('btnUnsold').disabled = !(connected && s.has_lot && (s.status === 'active' || s.status === 'paused'));
+    const canPause = connected && (s.status === 'active' || s.status === 'paused');
+    $('btnPause').disabled = !canPause;
+    $('pauseLabel').textContent = s.status === 'paused' ? 'RESUME' : 'PAUSE';
+    $('btnPause').classList.toggle('btn-success', s.status === 'paused');
+    $('btnPause').classList.toggle('btn-warning', s.status !== 'paused');
+
+    // Only the live row changes on a normal update; full queue redraw is renderQueueAll()
+    if (s.has_lot) setRow(s.ap_id, 'active');
+    updateOfferButtons();
+
+    // Highlight the current leader's card
+    document.querySelectorAll('.bidder-card').forEach(r => r.style.boxShadow = '');
+    if (s.has_lot && s.has_bids) {
+      const card = $(`bidder-row-${s.highest_bidder_id}`);
+      if (card) {
+        card.style.boxShadow = '0 0 20px #00f5ff, inset 0 0 10px #00f5ff';
+      }
+    }
+  }
+
+  // ---- server events ------------------------------------------------------
+  socket.on('player_update', s => { $('highestBidderDisplay').dataset.keep = ''; snap = s; renderAll(); });
+  socket.on('bid_update', s => { snap = s; renderAll(); });
+
+  socket.on('player_sold', d => {
+    snap = d.snapshot;
+    renderAll();
+    setRow(d.ap_id, 'sold', d.sold_to);
+    $('highestBidderDisplay').dataset.keep = '1';
+    $('highestBidderDisplay').textContent = `\u2705 ${d.player_name} sold to ${d.sold_to} for ${money(d.sold_price)}`;
+    const budgetEl = $(`budget-${d.buyer_id}`);
+    if (budgetEl) budgetEl.textContent = money(d.buyer_budget_remaining);
+    const squadEl = $(`squad-${d.buyer_id}`);
+    if (squadEl && d.buyer_squad_count != null) {
+      squadEl.innerHTML = `<i class="bi bi-people me-1"></i>${d.buyer_squad_count}/${snap.max_squad_size || 25}`;
+    }
+  });
+
+  socket.on('player_unsold', d => {
+    snap = d.snapshot;
+    renderAll();
+    setRow(d.ap_id, 'unsold');
+    $('highestBidderDisplay').dataset.keep = '1';
+    $('highestBidderDisplay').textContent = `\u274c ${d.player_name} unsold`;
+  });
+
+  socket.on('auction_paused', s => { snap = s; renderAll(); });
+  socket.on('auction_resumed', s => { snap = s; renderAll(); });
+
+  // ---- helpers ------------------------------------------------------------
+  function showHostAlert(msg) {
+    $('hostAlertText').textContent = msg;
+    $('hostAlert').style.display = 'block';
+    clearTimeout(alertTimer);
+    alertTimer = setTimeout(hideHostAlert, 8000);
+  }
+  function hideHostAlert() { $('hostAlert').style.display = 'none'; }
+
+  renderQueueAll();
+  renderAll();   // paint everything from the server-rendered snapshot on load/refresh
+</script>
+{% endblock %}

@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Sign In — Cricket Auction{% endblock %}
+
+{% block extra_style %}
+.login-box {
+  background: radial-gradient(circle at top, #1e0040 0%, #0d001a 100%);
+  border: 2px solid #9d00ff;
+  border-radius: 16px;
+  box-shadow: 0 0 30px rgba(157, 0, 255, 0.4), inset 0 0 15px rgba(157,0,255,0.1);
+}
+.login-title-glow {
+  font-family: 'Orbitron', monospace;
+  font-weight: 800;
+  color: #ffffff;
+  text-shadow: 0 0 12px #9d00ff, 0 0 25px rgba(0, 245, 255, 0.6);
+  letter-spacing: 2px;
+}
+.login-btn-glow {
+  background: linear-gradient(135deg, #9d00ff 0%, #00f5ff 100%);
+  border: none;
+  color: #000000;
+  font-weight: 800;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 1.2rem;
+  letter-spacing: 1.5px;
+  box-shadow: 0 0 15px rgba(0, 245, 255, 0.6);
+  transition: all 0.3s ease;
+}
+.login-btn-glow:hover {
+  box-shadow: 0 0 25px rgba(0, 245, 255, 0.9), 0 0 35px rgba(157, 0, 255, 0.8);
+  transform: translateY(-2px);
+  color: #000;
+}
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center align-items-center" style="min-height: 75vh;">
+  <div class="col-md-6 col-lg-4">
+    <div class="card login-box shadow-lg">
+      <div class="card-header text-center py-4" style="background: transparent; border-bottom: 1px solid rgba(157,0,255,0.3);">
+        <div class="fs-1 mb-2">🏏</div>
+        <h2 class="login-title-glow mb-1">CRICKET AUCTION</h2>
+        <p class="mb-0" style="color: #c4a8ff; font-weight: 500;">Sign in to enter the auction arena</p>
+      </div>
+      <div class="card-body p-4">
+        <form method="POST" action="{{ url_for('login') }}">
+          <div class="mb-3">
+            <label class="form-label" style="color: #ffffff; font-weight: 600;">
+              <i class="bi bi-person-fill text-info me-1"></i> USERNAME
+            </label>
+            <input type="text" name="username" class="form-control form-control-lg"
+                   placeholder="Enter your username" required autofocus
+                   style="color: #ffffff !important; background: #0a0015 !important; border: 1.5px solid #9d00ff !important;">
+          </div>
+          <div class="mb-4">
+            <label class="form-label" style="color: #ffffff; font-weight: 600;">
+              <i class="bi bi-lock-fill text-warning me-1"></i> PASSWORD
+            </label>
+            <input type="password" name="password" class="form-control form-control-lg"
+                   placeholder="Enter your password" required
+                   style="color: #ffffff !important; background: #0a0015 !important; border: 1.5px solid #9d00ff !important;">
+          </div>
+          <button type="submit" class="btn login-btn-glow w-100 py-2">
+            ENTER ARENA <i class="bi bi-arrow-right-circle-fill ms-1"></i>
+          </button>
+        </form>
+      </div>
+    </div>
+    <div class="text-center mt-3 p-2 rounded" style="background: rgba(157,0,255,0.08); border: 1px solid rgba(157,0,255,0.2);">
+      <small style="color: #d4c2ff; font-weight: 500;">
+        <i class="bi bi-shield-check text-info me-1"></i> Bidders: ask your auctioneer for credentials or invite link.
+      </small>
+    </div>
+  </div>
+</div>
+{% endblock %}
